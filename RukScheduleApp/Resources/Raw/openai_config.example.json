@@ -1,0 +1,6 @@
+{
+  "OpenAI": {
+    "ApiKey": "",
+    "BaseUrl": "https://api.openai.com/v1"
+  }
+}
