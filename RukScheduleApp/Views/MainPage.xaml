@@ -1,0 +1,74 @@
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="RukScheduleApp.Views.SchedulePage"
+             x:Name="RootPage"
+             Title="Программа просмотра расписания">
+
+    <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,*" Padding="20" RowSpacing="15">
+
+        <Label Grid.Row="0" Text="Программа просмотра расписания" 
+               FontSize="24" FontAttributes="Bold" HorizontalOptions="Center"/>
+
+        <VerticalStackLayout Grid.Row="1">
+            <Label Text="Выберите филиал:" FontAttributes="Bold"/>
+            <Picker ItemsSource="{Binding Branches}" 
+                    SelectedItem="{Binding SelectedBranch}"
+                    Title="Филиал"/>
+        </VerticalStackLayout>
+
+        <VerticalStackLayout Grid.Row="2">
+            <Label Text="Выберите сотрудника:" FontAttributes="Bold"/>
+            <Picker ItemsSource="{Binding Teachers}" 
+                    SelectedItem="{Binding SelectedTeacher}"
+                    Title="Сотрудник"/>
+        </VerticalStackLayout>
+
+        <VerticalStackLayout Grid.Row="3">
+            <Label Text="Выберите дату:" FontAttributes="Bold"/>
+            <DatePicker Date="{Binding SelectedDate}" />
+        </VerticalStackLayout>
+
+        <Button Grid.Row="4" Text="Загрузить расписание" 
+                Command="{Binding LoadScheduleCommand}"
+                IsEnabled="{Binding SelectedTeacher, Converter={StaticResource StringIsNotNullOrEmptyConverter}}"
+                HorizontalOptions="Fill"
+                VerticalOptions="Start"
+                Margin="0,10,0,0"/>
+
+        <Border Grid.Row="5" StrokeShape="RoundRectangle 10" Stroke="Gray" Padding="10" MinimumHeightRequest="240">
+            <Grid RowDefinitions="Auto,*,Auto" RowSpacing="8">
+                <HorizontalStackLayout Grid.Row="0" Spacing="10">
+                    <Button Text="Очистить чат" Command="{Binding ClearChatCommand}" Padding="12,6" />
+                    <Button Text="Копировать всё" Command="{Binding CopyAllChatCommand}" Padding="12,6" />
+                </HorizontalStackLayout>
+
+                <CollectionView Grid.Row="1" ItemsSource="{Binding ChatHistory}">
+                    <CollectionView.ItemTemplate>
+                        <DataTemplate>
+                            <Frame Margin="4" Padding="8" 
+                                   BackgroundColor="{Binding Role, Converter={StaticResource RoleColorConverter}}"
+                                   HorizontalOptions="{Binding Role, Converter={StaticResource RoleAlignConverter}}">
+                                <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto" ColumnSpacing="6">
+                                    <Label Grid.Column="0" Text="{Binding Content}" TextColor="Black" LineBreakMode="WordWrap" />
+                                    <Button Grid.Column="1" Text="Копировать" FontSize="11" Padding="6,2"
+                                            VerticalOptions="Start"
+                                            Command="{Binding Source={x:Reference RootPage}, Path=BindingContext.CopyMessageCommand}"
+                                            CommandParameter="{Binding .}" />
+                                </Grid>
+                            </Frame>
+                        </DataTemplate>
+                    </CollectionView.ItemTemplate>
+                </CollectionView>
+
+                <Grid Grid.Row="2" ColumnDefinitions="*, Auto" ColumnSpacing="10" Margin="0,8,0,0">
+                    <Entry Grid.Column="0" Text="{Binding UserInput}" 
+                           Placeholder="Спросите AI (например: Покажи расписание Иванова)..."
+                           ReturnType="Send"
+                           ReturnCommand="{Binding SendChatMessageCommand}" />
+                    <Button Grid.Column="1" Text="➤" Command="{Binding SendChatMessageCommand}" WidthRequest="50"/>
+                </Grid>
+            </Grid>
+        </Border>
+
+    </Grid>
+</ContentPage>
