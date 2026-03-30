@@ -361,3 +361,6 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+
+# Secrets (OpenAI key) - keep locally, do not commit
+RukScheduleApp/Resources/Raw/openai_config.json
