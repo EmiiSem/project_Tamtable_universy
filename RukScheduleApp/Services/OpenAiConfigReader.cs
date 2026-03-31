@@ -11,12 +11,13 @@ public static class OpenAiConfigReader
 {
     private const string AssetFileName = "openai_config.json";
     private const string ExampleAssetFileName = "openai_config.example.json";
-    private const string DefaultBaseUrl = "https://api.openai.com/v1";
+    private const string DefaultBaseUrl = "https://llm.api.cloud.yandex.net/foundationModels/v1/chatCompletion";
 
     private static readonly SemaphoreSlim Gate = new(1, 1);
     private static bool _initialized;
     private static string? _apiKey;
     private static string? _baseUrl;
+    private static string? _projectId;
 
     public static async Task<string?> GetApiKeyAsync()
     {
@@ -24,12 +25,18 @@ public static class OpenAiConfigReader
         return NormalizeKey(_apiKey);
     }
 
+    public static async Task<string?> GetProjectIdAsync()
+    {
+        await EnsureInitializedAsync();
+        return _projectId;
+    }
+
     /// <summary>Полный URL вызова chat/completions.</summary>
     public static async Task<string> GetChatCompletionsUrlAsync()
     {
         await EnsureInitializedAsync();
-        var b = string.IsNullOrWhiteSpace(_baseUrl) ? DefaultBaseUrl : _baseUrl!.Trim().TrimEnd('/');
-        return b + "/chat/completions";
+        var b = string.IsNullOrWhiteSpace(_baseUrl) ? DefaultBaseUrl : _baseUrl!;
+        return b;
     }
 
     private static async Task EnsureInitializedAsync()
@@ -55,11 +62,14 @@ public static class OpenAiConfigReader
                         _apiKey = keyEl.GetString();
                     if (openAi.TryGetProperty("BaseUrl", out var baseEl))
                         _baseUrl = baseEl.GetString();
+                    if (openAi.TryGetProperty("ProjectId", out var projectEl))
+                        _projectId = projectEl.GetString();
                 }
             }
             catch (FileNotFoundException)
             {
                 _apiKey = null;
+                _projectId = null;
             }
 
             // Если реального конфигурационного файла нет или ключ пустой — пробуем example.
@@ -77,6 +87,8 @@ public static class OpenAiConfigReader
                             _apiKey = keyEl.GetString();
                         if (openAi.TryGetProperty("BaseUrl", out var baseEl))
                             _baseUrl = baseEl.GetString();
+                        if (openAi.TryGetProperty("ProjectId", out var projectEl))
+                            _projectId = projectEl.GetString();
                     }
                 }
                 catch (FileNotFoundException)
@@ -90,6 +102,9 @@ public static class OpenAiConfigReader
 
             if (string.IsNullOrWhiteSpace(_baseUrl))
                 _baseUrl = Environment.GetEnvironmentVariable("OPENAI_BASE_URL");
+
+            if (string.IsNullOrWhiteSpace(_projectId))
+                _projectId = Environment.GetEnvironmentVariable("OPENAI_PROJECT_ID") ?? Environment.GetEnvironmentVariable("YC_FOLDER_ID");
 
             _initialized = true;
         }
