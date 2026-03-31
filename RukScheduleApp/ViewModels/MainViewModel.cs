@@ -14,7 +14,8 @@ namespace RukScheduleApp.ViewModels
             "Здравствуйте! Выберите филиал, преподавателя и дату, затем нажмите «Загрузить расписание» — расписание появится в чате; при наличии ключа AI добавит краткое пояснение.";
 
         private readonly IScheduleParser _parser;
-        private readonly LlmApiService _llmService;
+        private readonly ILlmService _llmService;
+        private readonly IDatabaseService _databaseService;
 
         [ObservableProperty]
         private List<string> _branches;
@@ -40,12 +41,11 @@ namespace RukScheduleApp.ViewModels
         [ObservableProperty]
         private bool _isBusy;
 
-        private List<ScheduleItem> _currentScheduleContext = new();
-
-        public MainViewModel(IScheduleParser parser, LlmApiService llmService)
+        public MainViewModel(IScheduleParser parser, ILlmService llmService, IDatabaseService databaseService)
         {
             _parser = parser;
             _llmService = llmService;
+            _databaseService = databaseService;
             ChatHistory = new ObservableCollection<ChatMessage>();
             ChatHistory.Add(new ChatMessage { Role = "assistant", Content = WelcomeText });
         }
@@ -60,8 +60,6 @@ namespace RukScheduleApp.ViewModels
             }
             catch (Exception ex)
             {
-                // Часто VPN/SSL или проблемы сети ломают загрузку филиалов.
-                // Чтобы приложение не вылетало — покажем ошибку в чате.
                 ChatHistory.Add(new ChatMessage
                 {
                     Role = "assistant",
@@ -112,9 +110,9 @@ namespace RukScheduleApp.ViewModels
             IsBusy = true;
             try
             {
-                _currentScheduleContext = await _parser.GetScheduleAsync(SelectedTeacher, SelectedDate);
+                var scheduleContext = await _parser.GetScheduleAsync(SelectedTeacher, SelectedDate);
 
-                if (_currentScheduleContext == null || !_currentScheduleContext.Any())
+                if (scheduleContext == null || !scheduleContext.Any())
                 {
                     ChatHistory.Add(new ChatMessage
                     {
@@ -124,12 +122,15 @@ namespace RukScheduleApp.ViewModels
                     return;
                 }
 
-                var formatted = FormatScheduleForChat(SelectedTeacher, SelectedDate, _currentScheduleContext);
+                // Сохраняем расписание в кэш
+                await _databaseService.CacheScheduleAsync(scheduleContext);
+
+                var formatted = FormatScheduleForChat(SelectedTeacher, SelectedDate, scheduleContext);
                 ChatHistory.Add(new ChatMessage { Role = "assistant", Content = formatted });
 
-                var ai = await _llmService.GetAnswerAsync(
+                var ai = await _llmService.AskAboutScheduleAsync(
                     "Кратко опиши это расписание для преподавателя списком: номер пары, предмет, группа, аудитория и тип занятия. Один-два абзаца, по-русски.",
-                    _currentScheduleContext);
+                    SelectedBranch);
 
                 if (!string.IsNullOrWhiteSpace(ai) && !LooksLikeConfigOrTransportError(ai))
                     ChatHistory.Add(new ChatMessage { Role = "assistant", Content = ai });
@@ -188,7 +189,13 @@ namespace RukScheduleApp.ViewModels
             IsBusy = true;
             try
             {
-                var answer = await _llmService.GetAnswerAsync(question, _currentScheduleContext);
+                string groupFilter = null;
+                if (question.Contains("группа", StringComparison.OrdinalIgnoreCase))
+                {
+                    groupFilter = SelectedBranch; // только если запрос про группу
+                }
+
+                var answer = await _llmService.AskAboutScheduleAsync(question, groupFilter);
                 ChatHistory.Add(new ChatMessage { Role = "assistant", Content = answer });
             }
             catch (Exception ex)
