@@ -25,6 +25,7 @@ namespace RukScheduleApp
             builder.Services.AddSingleton<IDatabaseService, DatabaseService>();
             builder.Services.AddSingleton<IScheduleParser, ScheduleParser>();
             builder.Services.AddSingleton<ILlmService, LlmService>();
+            builder.Services.AddSingleton<LlmApiService>();
 
             // Регистрация HttpClient
             builder.Services.AddHttpClient<IScheduleParser, ScheduleParser>();
