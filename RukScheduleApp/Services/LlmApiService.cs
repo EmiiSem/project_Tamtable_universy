@@ -22,9 +22,10 @@ namespace RukScheduleApp.Services
                 return "Укажите ключ OpenAI в файле Resources/Raw/openai_config.json (поле OpenAI.ApiKey), пересоберите приложение. Дополнительно можно задать переменную OPENAI_API_KEY.";
             }
 
+            var projectId = await OpenAiConfigReader.GetProjectIdAsync();
             var chatUrl = await OpenAiConfigReader.GetChatCompletionsUrlAsync();
 
-            var contextData = "Нет данных о расписании.";
+            var contextData = "Данные о расписании в ближайшие 7 дней отсутствуют.";
             if (scheduleContext != null && scheduleContext.Count > 0)
             {
                 var sb = new StringBuilder();
@@ -40,33 +41,35 @@ namespace RukScheduleApp.Services
                 }
                 contextData = sb.ToString();
             }
-            else
-            {
-                contextData = "Расписание пустое. Пар нет.";
-            }
 
             var systemPrompt = $"""
-Ты умный ассистент расписания университета.
-Используй следующие данные для ответа:
-{contextData}
+            Ты умный ассистент расписания университета.
+            Используй следующие данные для ответа:
+            {contextData}
 
-Правила:
-1. Если пользователь спрашивает про расписание, а данных нет (список пуст), отвечай строго: 'Пар у преподавателя нету, выберите другую дату'.
-2. Если данные есть, отвечай подробно по структуре:
-   - ФИО преподавателя
-   - Предмет
-   - Аудитория
-   - Время пары
-3. Отвечай вежливо и на русском языке.
-""";
+            Правила:
+            1. Если пользователь спрашивает про расписание, а данных нет (список пуст), отвечай вежливо, что расписание на ближайшие дни отсутствует.
+            2. Если данные есть, отвечай подробно по структуре:
+            - ФИО преподавателя
+            - Предмет
+            - Аудитория
+            - Время пары
+            3. Отвечай вежливо и на русском языке.
+            """;
 
             var requestBody = new
             {
-                model = "gpt-4o-mini",
-                messages = new[]
+                modelUri = $"gpt://{projectId}/yandexgpt-lite/latest",
+                completionOptions = new
                 {
-                    new { role = "system", content = systemPrompt },
-                    new { role = "user", content = userQuestion }
+                    stream = false,
+                    temperature = 0.3,
+                    maxTokens = 500
+                },
+                messages = new object[]
+                {
+                    new { role = "system", text = systemPrompt },
+                    new { role = "user", text = userQuestion }
                 }
             };
 
@@ -75,11 +78,14 @@ namespace RukScheduleApp.Services
                 Encoding.UTF8,
                 "application/json");
 
+            _httpClient.DefaultRequestHeaders.Clear();
+            _httpClient.DefaultRequestHeaders.Add("Authorization", $"Api-Key {apiKey}");
+            _httpClient.DefaultRequestHeaders.Add("x-folder-id", projectId);
+
             using var request = new HttpRequestMessage(HttpMethod.Post, chatUrl)
             {
                 Content = httpContent
             };
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
 
             HttpResponseMessage response;
             try
@@ -88,16 +94,12 @@ namespace RukScheduleApp.Services
             }
             catch (Exception ex)
             {
-                return $"Не удалось связаться с OpenAI: {ex.Message}";
+                return $"Не удалось связаться с Yandex Cloud API: {ex.Message}";
             }
 
             var responseString = await response.Content.ReadAsStringAsync();
             if (!response.IsSuccessStatusCode)
             {
-                if (responseString.Contains("unsupported_country", StringComparison.OrdinalIgnoreCase))
-                    return "OpenAI недоступен из вашего региона. Включите VPN и перезапустите приложение; при ошибках SSL попробуйте другой узел VPN. Альтернатива: в openai_config.json укажите OpenAI-совместимый прокси в поле BaseUrl (и свой ключ у этого провайдера).";
-                if (responseString.Contains("insufficient_quota", StringComparison.OrdinalIgnoreCase))
-                    return "Квота OpenAI исчерпана: проверьте баланс и тариф на platform.openai.com.";
                 return $"Ошибка AI API: {response.StatusCode}. {TrimForUi(responseString)}";
             }
 
@@ -105,8 +107,8 @@ namespace RukScheduleApp.Services
             {
                 using var doc = JsonDocument.Parse(responseString);
                 var root = doc.RootElement;
-                var choice = root.GetProperty("choices")[0];
-                var text = choice.GetProperty("message").GetProperty("content").GetString();
+                var alternative = root.GetProperty("result").GetProperty("alternatives")[0];
+                var text = alternative.GetProperty("message").GetProperty("text").GetString();
                 return string.IsNullOrWhiteSpace(text) ? "(Пустой ответ модели)" : text.Trim();
             }
             catch
