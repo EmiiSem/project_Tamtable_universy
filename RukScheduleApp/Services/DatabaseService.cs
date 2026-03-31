@@ -37,7 +37,7 @@ namespace RukScheduleApp.Services
         public async Task<List<ScheduleItem>> GetCachedScheduleAsync(DateTime startDate, DateTime endDate)
         {
             return await _context.ScheduleItems
-                .Where(x => x.Date >= startDate && x.Date <= endDate)
+                .Where(x => x.Date.Date >= startDate.Date && x.Date.Date <= endDate.Date)
                 .ToListAsync();
         }
 
