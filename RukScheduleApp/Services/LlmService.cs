@@ -17,78 +17,101 @@ namespace RukScheduleApp.Services
             _llmApiService = llmApiService;
         }
 
-        public async Task<string> AskAboutScheduleAsync(string question, string groupName)
+        public async Task<string> AskAboutScheduleAsync(string question, string? groupName, IReadOnlyList<ScheduleItem>? scheduleContextOverride = null)
         {
             try
             {
-                // Лог в файл
+                /*
+                // Лог в %TEMP%\debug.log (отключено)
                 var logPath = Path.Combine(Path.GetTempPath(), "debug.log");
                 System.IO.File.WriteAllText(logPath, "");
-                System.IO.File.AppendAllText(logPath, $"DEBUG: SelectedBranch (groupName): {groupName ?? "null"}{Environment.NewLine}");
+                System.IO.File.AppendAllText(logPath, $"DEBUG: groupName (учебная группа, не филиал): {groupName ?? "null"}{Environment.NewLine}");
+                */
 
-                // Определяем нужный диапазон дат из вопроса, чтобы не ограничиваться "сегодня + 7 дней"
-                var dateRange = ResolveDateRange(question);
-                System.IO.File.AppendAllText(
-                    logPath,
-                    $"DEBUG: Диапазон запроса: {dateRange.Start:dd.MM.yyyy}..{dateRange.End:dd.MM.yyyy} (kind={dateRange.Kind}){Environment.NewLine}");
+                List<ScheduleItem> filteredSchedule;
+                DateRange dateRange;
 
-                // Получение расписания из кэша
-                var schedule = await _databaseService.GetCachedScheduleAsync(dateRange.Start, dateRange.End);
-
-                System.IO.File.AppendAllText(logPath, $"DEBUG: Всего записей в кэше: {schedule.Count}{Environment.NewLine}");
-
-                // Фильтруем строго под выбранный диапазон (на случай, если в БД есть шире)
-                var filteredSchedule = schedule
-                    .Where(x => x.Date.Date >= dateRange.Start.Date && x.Date.Date <= dateRange.End.Date)
-                    .ToList();
-                System.IO.File.AppendAllText(logPath, $"DEBUG: После фильтрации по диапазону: {filteredSchedule.Count}{Environment.NewLine}");
-
-                // Извлечение преподавателя
-                var teacherName = ExtractTeacherNameFromQuestion(question);
-                if (!string.IsNullOrEmpty(teacherName))
+                // Готовый контекст с сайта — не трогаем кэш и не путаем филиал с GroupName
+                if (scheduleContextOverride is { Count: > 0 })
                 {
-                    filteredSchedule = filteredSchedule.Where(x => x.Teacher.Contains(teacherName, StringComparison.OrdinalIgnoreCase)).ToList();
-                    System.IO.File.AppendAllText(logPath, $"DEBUG: После фильтрации по преподавателю '{teacherName}': {filteredSchedule.Count}{Environment.NewLine}");
+                    filteredSchedule = scheduleContextOverride.ToList();
+                    if (!string.IsNullOrEmpty(groupName))
+                    {
+                        filteredSchedule = filteredSchedule
+                            .Where(x => string.Equals(x.GroupName, groupName, StringComparison.Ordinal))
+                            .ToList();
+                    }
+
+                    var minD = filteredSchedule.Min(x => x.Date.Date);
+                    var maxD = filteredSchedule.Max(x => x.Date.Date);
+                    var kind = minD == maxD ? DateRangeKind.ExactDay : DateRangeKind.DefaultNext7Days;
+                    dateRange = new DateRange(minD, maxD, kind);
+                    // System.IO.File.AppendAllText(logPath, $"DEBUG: override: {filteredSchedule.Count} записей, диапазон {minD:dd.MM.yyyy}..{maxD:dd.MM.yyyy}{Environment.NewLine}");
+                }
+                else
+                {
+                    // Определяем нужный диапазон дат из вопроса, чтобы не ограничиваться "сегодня + 7 дней"
+                    dateRange = ResolveDateRange(question);
+                    // System.IO.File.AppendAllText(
+                    //     logPath,
+                    //     $"DEBUG: Диапазон запроса: {dateRange.Start:dd.MM.yyyy}..{dateRange.End:dd.MM.yyyy} (kind={dateRange.Kind}){Environment.NewLine}");
+
+                    // Получение расписания из кэша
+                    var schedule = await _databaseService.GetCachedScheduleAsync(dateRange.Start, dateRange.End);
+
+                    // System.IO.File.AppendAllText(logPath, $"DEBUG: Всего записей в кэше: {schedule.Count}{Environment.NewLine}");
+
+                    // Фильтруем строго под выбранный диапазон (на случай, если в БД есть шире)
+                    filteredSchedule = schedule
+                        .Where(x => x.Date.Date >= dateRange.Start.Date && x.Date.Date <= dateRange.End.Date)
+                        .ToList();
+                    // System.IO.File.AppendAllText(logPath, $"DEBUG: После фильтрации по диапазону: {filteredSchedule.Count}{Environment.NewLine}");
+
+                    // Извлечение преподавателя
+                    var teacherName = ExtractTeacherNameFromQuestion(question);
+                    if (!string.IsNullOrEmpty(teacherName))
+                    {
+                        filteredSchedule = filteredSchedule.Where(x => x.Teacher.Contains(teacherName, StringComparison.OrdinalIgnoreCase)).ToList();
+                        // System.IO.File.AppendAllText(logPath, $"DEBUG: После фильтрации по преподавателю '{teacherName}': {filteredSchedule.Count}{Environment.NewLine}");
+                    }
+
+                    // Извлечение аудитории (не применять к сообщению, которое выглядит только как дата — иначе «03» из 03.04.2026 даёт ложный фильтр)
+                    var room = LooksLikeDateOnlyMessage(question) ? null : ExtractRoomFromQuestion(question);
+                    if (!string.IsNullOrEmpty(room))
+                    {
+                        filteredSchedule = filteredSchedule.Where(x => x.Room.Contains(room, StringComparison.OrdinalIgnoreCase)).ToList();
+                        // System.IO.File.AppendAllText(logPath, $"DEBUG: После фильтрации по аудитории '{room}': {filteredSchedule.Count}{Environment.NewLine}");
+                    }
+
+                    // Извлечение типа занятия
+                    var lessonType = ExtractLessonTypeFromQuestion(question);
+                    if (!string.IsNullOrEmpty(lessonType))
+                    {
+                        filteredSchedule = filteredSchedule.Where(x => x.Subject.ToLower().Contains(lessonType.ToLower())).ToList();
+                        // System.IO.File.AppendAllText(logPath, $"DEBUG: После фильтрации по типу занятия '{lessonType}': {filteredSchedule.Count}{Environment.NewLine}");
+                    }
+
+                    // Фильтрация по учебной группе (имя группы, не филиал)
+                    if (!string.IsNullOrEmpty(groupName))
+                    {
+                        filteredSchedule = filteredSchedule.Where(x => x.GroupName == groupName).ToList();
+                        // System.IO.File.AppendAllText(logPath, $"DEBUG: После фильтрации по группе '{groupName}': {filteredSchedule.Count}{Environment.NewLine}");
+                    }
+
+                    // System.IO.File.AppendAllText(logPath, $"DEBUG: Передаётся {filteredSchedule.Count} записей в LLM.{Environment.NewLine}");
+                    // foreach (var item in filteredSchedule)
+                    // {
+                    //     System.IO.File.AppendAllText(logPath, $"  - {item.Date:dd.MM.yyyy} | {item.Teacher} | {item.Subject} | {item.Room}{Environment.NewLine}");
+                    // }
                 }
 
-                // Извлечение аудитории (не применять к сообщению, которое выглядит только как дата — иначе «03» из 03.04.2026 даёт ложный фильтр)
-                var room = LooksLikeDateOnlyMessage(question) ? null : ExtractRoomFromQuestion(question);
-                if (!string.IsNullOrEmpty(room))
-                {
-                    filteredSchedule = filteredSchedule.Where(x => x.Room.Contains(room, StringComparison.OrdinalIgnoreCase)).ToList();
-                    System.IO.File.AppendAllText(logPath, $"DEBUG: После фильтрации по аудитории '{room}': {filteredSchedule.Count}{Environment.NewLine}");
-                }
-
-                // Извлечение типа занятия
-                var lessonType = ExtractLessonTypeFromQuestion(question);
-                if (!string.IsNullOrEmpty(lessonType))
-                {
-                    filteredSchedule = filteredSchedule.Where(x => x.Subject.ToLower().Contains(lessonType.ToLower())).ToList();
-                    System.IO.File.AppendAllText(logPath, $"DEBUG: После фильтрации по типу занятия '{lessonType}': {filteredSchedule.Count}{Environment.NewLine}");
-                }
-
-                // Фильтрация по группе (если указана)
-                if (!string.IsNullOrEmpty(groupName))
-                {
-                    filteredSchedule = filteredSchedule.Where(x => x.GroupName == groupName).ToList();
-                    System.IO.File.AppendAllText(logPath, $"DEBUG: После фильтрации по группе '{groupName}': {filteredSchedule.Count}{Environment.NewLine}");
-                }
-
-                System.IO.File.AppendAllText(logPath, $"DEBUG: Передаётся {filteredSchedule.Count} записей в LLM.{Environment.NewLine}");
-                foreach (var item in filteredSchedule)
-                {
-                    System.IO.File.AppendAllText(logPath, $"  - {item.Date:dd.MM.yyyy} | {item.Teacher} | {item.Subject} | {item.Room}{Environment.NewLine}");
-                }
-
-                // return await _llmApiService.GetAnswerAsync(question, filteredSchedule);
-                // Вместо оригинального вопроса
                 var adjustedQuestion = BuildNormalizedQuestion(question, dateRange);
 
                 return await _llmApiService.GetAnswerAsync(adjustedQuestion, filteredSchedule);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                System.Diagnostics.Debug.WriteLine($"Ошибка в AskAboutScheduleAsync: {ex.Message}");
+                // System.Diagnostics.Debug.WriteLine($"Ошибка в AskAboutScheduleAsync: {ex.Message}");
                 return "Произошла ошибка при обработке запроса.";
             }
         }
