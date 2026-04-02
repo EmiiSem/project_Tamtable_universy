@@ -248,22 +248,26 @@
                             <Border.StrokeShape>
                                 <RoundRectangle CornerRadius="14" />
                             </Border.StrokeShape>
-                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
-                                <Label Grid.Column="0"
-                                       Text="{Binding Content}"
+                            <!-- Текст на всю ширину; копирование — компактная кнопка снизу (не рядом с коротким текстом) -->
+                            <VerticalStackLayout Spacing="6">
+                                <Label Text="{Binding Content}"
                                        TextColor="{Binding Role, Converter={StaticResource RoleMessageTextColorConverter}}"
                                        LineBreakMode="WordWrap" />
-                                <Button Grid.Column="1"
-                                        Text="Копировать"
-                                        FontSize="11"
-                                        Padding="8,4"
-                                        CornerRadius="8"
-                                        VerticalOptions="Start"
+                                <Button Text="Копировать"
+                                        FontSize="10"
+                                        Padding="6,2"
+                                        Margin="0,0,0,0"
+                                        CornerRadius="6"
+                                        HorizontalOptions="End"
+                                        MinimumHeightRequest="26"
+                                        MinimumWidthRequest="0"
+                                        HeightRequest="28"
                                         BackgroundColor="{AppThemeBinding Light=#FFFFFF, Dark=#3A3A3C}"
                                         TextColor="{AppThemeBinding Light=#374151, Dark=#E5E7EB}"
+                                        BorderWidth="0"
                                         Command="{Binding Source={x:Reference RootPage}, Path=BindingContext.CopyMessageCommand}"
                                         CommandParameter="{Binding .}" />
-                            </Grid>
+                            </VerticalStackLayout>
                         </Border>
                     </VerticalStackLayout>
                 </DataTemplate>
