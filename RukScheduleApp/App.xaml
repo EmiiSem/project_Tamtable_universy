@@ -11,7 +11,11 @@
                 <ResourceDictionary Source="Resources/Styles/Styles.xaml" />
             </ResourceDictionary.MergedDictionaries>
             <conv:StringIsNotNullOrEmptyConverter x:Key="StringIsNotNullOrEmptyConverter" />
+            <conv:IsNotNullConverter x:Key="IsNotNullConverter" />
             <conv:RoleToColorConverter x:Key="RoleColorConverter" />
+            <conv:RoleToMessageTextColorConverter x:Key="RoleMessageTextColorConverter" />
+            <conv:RoleToSenderLabelConverter x:Key="RoleSenderLabelConverter" />
+            <conv:RoleToTextAlignmentConverter x:Key="RoleSenderTextAlignConverter" />
             <conv:RoleToLayoutOptionsConverter x:Key="RoleAlignConverter" />
         </ResourceDictionary>
     </Application.Resources>
