@@ -2,73 +2,322 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              x:Class="RukScheduleApp.Views.SchedulePage"
              x:Name="RootPage"
-             Title="Программа просмотра расписания">
+             Title="Программа просмотра расписания"
+             BackgroundColor="{AppThemeBinding Light=#F0F2F7, Dark={StaticResource OffBlack}}">
 
-    <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,*" Padding="20" RowSpacing="15">
+    <!-- Верхняя часть — прокрутка формы; нижняя — AI-чат. Auto+ScrollView съедал всю высоту, чат сжимался до полоски. -->
+    <Grid Padding="0" RowDefinitions="*,2*">
 
-        <Label Grid.Row="0" Text="Программа просмотра расписания" 
-               FontSize="24" FontAttributes="Bold" HorizontalOptions="Center"/>
+        <ScrollView Grid.Row="0"
+                    VerticalOptions="Fill"
+                    Orientation="Vertical">
+            <VerticalStackLayout Padding="20,16,20,12" Spacing="14">
 
-        <VerticalStackLayout Grid.Row="1">
-            <Label Text="Выберите филиал:" FontAttributes="Bold"/>
-            <Picker ItemsSource="{Binding Branches}" 
-                    SelectedItem="{Binding SelectedBranch}"
-                    Title="Филиал"/>
-        </VerticalStackLayout>
-
-        <VerticalStackLayout Grid.Row="2">
-            <Label Text="Выберите сотрудника:" FontAttributes="Bold"/>
-            <Picker ItemsSource="{Binding Teachers}" 
-                    SelectedItem="{Binding SelectedTeacher}"
-                    Title="Сотрудник"/>
-        </VerticalStackLayout>
-
-        <VerticalStackLayout Grid.Row="3">
-            <Label Text="Выберите дату:" FontAttributes="Bold"/>
-            <DatePicker Date="{Binding SelectedDate}" />
-        </VerticalStackLayout>
-
-        <Button Grid.Row="4" Text="Загрузить расписание" 
-                Command="{Binding LoadScheduleCommand}"
-                IsEnabled="{Binding SelectedTeacher, Converter={StaticResource StringIsNotNullOrEmptyConverter}}"
-                HorizontalOptions="Fill"
-                VerticalOptions="Start"
-                Margin="0,10,0,0"/>
-
-        <Border Grid.Row="5" StrokeShape="RoundRectangle 10" Stroke="Gray" Padding="10" MinimumHeightRequest="240">
-            <Grid RowDefinitions="Auto,*,Auto" RowSpacing="8">
-                <HorizontalStackLayout Grid.Row="0" Spacing="10">
-                    <Button Text="Очистить чат" Command="{Binding ClearChatCommand}" Padding="12,6" />
-                    <Button Text="Копировать всё" Command="{Binding CopyAllChatCommand}" Padding="12,6" />
+                <HorizontalStackLayout Spacing="10" VerticalOptions="Center">
+                    <ActivityIndicator IsRunning="{Binding IsBusy}"
+                                       IsVisible="{Binding IsBusy}"
+                                       WidthRequest="26"
+                                       HeightRequest="26"
+                                       Color="{StaticResource Primary}" />
+                    <VerticalStackLayout Spacing="4">
+                        <Label Text="Расписание"
+                               FontSize="26"
+                               FontAttributes="Bold"
+                               TextColor="{AppThemeBinding Light=#111827, Dark=#F9FAFB}" />
+                        <Label Text="Филиал, сотрудник и дата — затем загрузка или вопрос к AI."
+                               FontSize="13"
+                               TextColor="{AppThemeBinding Light=#6B7280, Dark=#9CA3AF}"
+                               LineBreakMode="WordWrap" />
+                    </VerticalStackLayout>
                 </HorizontalStackLayout>
 
-                <CollectionView Grid.Row="1" ItemsSource="{Binding ChatHistory}">
+                <!-- Филиал -->
+                <Border StrokeThickness="0"
+                        BackgroundColor="{AppThemeBinding Light=#FFFFFF, Dark=#1C1C1E}"
+                        Padding="16,14">
+                    <Border.StrokeShape>
+                        <RoundRectangle CornerRadius="14" />
+                    </Border.StrokeShape>
+                    <Border.Shadow>
+                        <Shadow Brush="{AppThemeBinding Light=#25000000, Dark=#55000000}"
+                                Offset="0,2"
+                                Radius="14"
+                                Opacity="1" />
+                    </Border.Shadow>
+                    <VerticalStackLayout Spacing="10">
+                        <Label Text="Филиал"
+                               FontSize="12"
+                               FontAttributes="Bold"
+                               TextColor="{AppThemeBinding Light=#6B7280, Dark=#9CA3AF}" />
+                        <Picker ItemsSource="{Binding Branches}"
+                                SelectedItem="{Binding SelectedBranch}"
+                                Title="Выберите филиал" />
+                    </VerticalStackLayout>
+                </Border>
+
+                <!-- Сотрудник с поиском -->
+                <Border StrokeThickness="0"
+                        BackgroundColor="{AppThemeBinding Light=#FFFFFF, Dark=#1C1C1E}"
+                        Padding="16,14">
+                    <Border.StrokeShape>
+                        <RoundRectangle CornerRadius="14" />
+                    </Border.StrokeShape>
+                    <Border.Shadow>
+                        <Shadow Brush="{AppThemeBinding Light=#25000000, Dark=#55000000}"
+                                Offset="0,2"
+                                Radius="14"
+                                Opacity="1" />
+                    </Border.Shadow>
+                    <VerticalStackLayout Spacing="10">
+                        <Label Text="Сотрудник"
+                               FontSize="12"
+                               FontAttributes="Bold"
+                               TextColor="{AppThemeBinding Light=#6B7280, Dark=#9CA3AF}" />
+                        <Label Text="Сначала выберите филиал — список сотрудников появится ниже."
+                               FontSize="12"
+                               IsVisible="{Binding ShowTeacherBranchHint}"
+                               TextColor="{AppThemeBinding Light=#9CA3AF, Dark=#6B7280}"
+                               LineBreakMode="WordWrap" />
+                        <HorizontalStackLayout Spacing="10"
+                                               IsVisible="{Binding ShowTeacherLoadingRow}"
+                                               VerticalOptions="Center">
+                            <ActivityIndicator IsRunning="True"
+                                               WidthRequest="28"
+                                               HeightRequest="28"
+                                               Color="{StaticResource Primary}" />
+                            <Label Text="Загрузка списка сотрудников…"
+                                   FontSize="13"
+                                   VerticalOptions="Center"
+                                   TextColor="{AppThemeBinding Light=#6B7280, Dark=#9CA3AF}" />
+                        </HorizontalStackLayout>
+                        <SearchBar Text="{Binding TeacherSearchText, Mode=TwoWay}"
+                                   Placeholder="Поиск по ФИО..."
+                                   IsEnabled="{Binding Teachers, Converter={StaticResource IsNotNullConverter}}" />
+                        <Label Text="Ничего не найдено. Измените запрос."
+                               FontSize="12"
+                               IsVisible="{Binding ShowTeacherEmptySearchMessage}"
+                               TextColor="{AppThemeBinding Light=#B45309, Dark=#FBBF24}"
+                               LineBreakMode="WordWrap" />
+                        <Label Text="{Binding SelectedTeacher, StringFormat='Выбрано: {0}'}"
+                               FontSize="13"
+                               FontAttributes="Bold"
+                               IsVisible="{Binding SelectedTeacher, Converter={StaticResource StringIsNotNullOrEmptyConverter}}"
+                               TextColor="{StaticResource Primary}" />
+                        <CollectionView ItemsSource="{Binding FilteredTeachers}"
+                                        MaximumHeightRequest="160"
+                                        SelectionMode="None"
+                                        IsVisible="{Binding Teachers, Converter={StaticResource IsNotNullConverter}}">
+                            <CollectionView.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Margin="0,0,0,6"
+                                            Padding="12,10"
+                                            BackgroundColor="{AppThemeBinding Light=#F3F4F6, Dark=#2C2C2E}"
+                                            StrokeThickness="0">
+                                        <Border.StrokeShape>
+                                            <RoundRectangle CornerRadius="10" />
+                                        </Border.StrokeShape>
+                                        <Grid>
+                                            <Grid.GestureRecognizers>
+                                                <TapGestureRecognizer
+                                                    Command="{Binding Source={x:Reference RootPage}, Path=BindingContext.SelectTeacherCommand}"
+                                                    CommandParameter="{Binding .}" />
+                                            </Grid.GestureRecognizers>
+                                            <Label Text="{Binding .}"
+                                                   LineBreakMode="TailTruncation"
+                                                   FontSize="14"
+                                                   TextColor="{AppThemeBinding Light=#111827, Dark=#F3F4F6}" />
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </CollectionView.ItemTemplate>
+                        </CollectionView>
+                    </VerticalStackLayout>
+                </Border>
+
+                <!-- Дата и кнопка -->
+                <Border StrokeThickness="0"
+                        BackgroundColor="{AppThemeBinding Light=#FFFFFF, Dark=#1C1C1E}"
+                        Padding="16,14">
+                    <Border.StrokeShape>
+                        <RoundRectangle CornerRadius="14" />
+                    </Border.StrokeShape>
+                    <Border.Shadow>
+                        <Shadow Brush="{AppThemeBinding Light=#25000000, Dark=#55000000}"
+                                Offset="0,2"
+                                Radius="14"
+                                Opacity="1" />
+                    </Border.Shadow>
+                    <VerticalStackLayout Spacing="12">
+                        <Label Text="Дата"
+                               FontSize="12"
+                               FontAttributes="Bold"
+                               TextColor="{AppThemeBinding Light=#6B7280, Dark=#9CA3AF}" />
+                        <DatePicker Date="{Binding SelectedDate}" />
+                        <Button Text="Загрузить расписание"
+                                Command="{Binding LoadScheduleCommand}"
+                                IsEnabled="{Binding SelectedTeacher, Converter={StaticResource StringIsNotNullOrEmptyConverter}}"
+                                HorizontalOptions="Fill"
+                                CornerRadius="12"
+                                Padding="16,14" />
+                    </VerticalStackLayout>
+                </Border>
+
+            </VerticalStackLayout>
+        </ScrollView>
+
+        <!-- AI-чат: ~2/3 высоты экрана -->
+        <Border Grid.Row="1"
+                Margin="20,8,20,20"
+                VerticalOptions="Fill"
+                MinimumHeightRequest="240"
+                StrokeThickness="0"
+                BackgroundColor="{AppThemeBinding Light=#FFFFFF, Dark=#1C1C1E}"
+                Padding="14,12">
+            <Border.StrokeShape>
+                <RoundRectangle CornerRadius="16" />
+            </Border.StrokeShape>
+            <Border.Shadow>
+                <Shadow Brush="{AppThemeBinding Light=#28000000, Dark=#55000000}"
+                        Offset="0,4"
+                        Radius="18"
+                        Opacity="1" />
+            </Border.Shadow>
+            <Grid RowDefinitions="Auto,Auto,*,Auto" RowSpacing="10" VerticalOptions="Fill">
+
+                <!-- Заголовок блока чата: по центру, заметнее подписей «Филиал» / «Сотрудник» / «Дата» -->
+                <VerticalStackLayout Grid.Row="0" Spacing="4" HorizontalOptions="Fill">
+                    <Label Text="AI-ассистент"
+                           HorizontalTextAlignment="Center"
+                           HorizontalOptions="Center"
+                           FontSize="22"
+                           FontAttributes="Bold"
+                           TextColor="{StaticResource Primary}" />
+                    <Label Text="Расписание и ответы"
+                           HorizontalTextAlignment="Center"
+                           HorizontalOptions="Center"
+                           FontSize="11"
+                           TextColor="{AppThemeBinding Light=#6B7280, Dark=#9CA3AF}" />
+                </VerticalStackLayout>
+
+                <HorizontalStackLayout Grid.Row="1"
+                                       HorizontalOptions="Center"
+                                       Spacing="8">
+                    <Button Text="Очистить"
+                            Command="{Binding ClearChatCommand}"
+                            CornerRadius="10"
+                            BackgroundColor="{AppThemeBinding Light=#E5E7EB, Dark=#3A3A3C}"
+                            TextColor="{AppThemeBinding Light=#111827, Dark=#F9FAFB}">
+                        <Button.FontSize>
+                            <OnIdiom x:TypeArguments="x:Double" Phone="11" Default="13" />
+                        </Button.FontSize>
+                        <Button.Padding>
+                            <OnIdiom x:TypeArguments="Thickness">
+                                <OnIdiom.Phone>
+                                    <Thickness>8,5</Thickness>
+                                </OnIdiom.Phone>
+                                <OnIdiom.Default>
+                                    <Thickness>12,8</Thickness>
+                                </OnIdiom.Default>
+                            </OnIdiom>
+                        </Button.Padding>
+                        <Button.MinimumHeightRequest>
+                            <OnIdiom x:TypeArguments="x:Double" Phone="34" Default="44" />
+                        </Button.MinimumHeightRequest>
+                    </Button>
+                    <Button Text="Копировать всё"
+                            Command="{Binding CopyAllChatCommand}"
+                            CornerRadius="10"
+                            BackgroundColor="{AppThemeBinding Light=#E5E7EB, Dark=#3A3A3C}"
+                            TextColor="{AppThemeBinding Light=#111827, Dark=#F9FAFB}">
+                        <Button.FontSize>
+                            <OnIdiom x:TypeArguments="x:Double" Phone="11" Default="13" />
+                        </Button.FontSize>
+                        <Button.Padding>
+                            <OnIdiom x:TypeArguments="Thickness">
+                                <OnIdiom.Phone>
+                                    <Thickness>8,5</Thickness>
+                                </OnIdiom.Phone>
+                                <OnIdiom.Default>
+                                    <Thickness>12,8</Thickness>
+                                </OnIdiom.Default>
+                            </OnIdiom>
+                        </Button.Padding>
+                        <Button.MinimumHeightRequest>
+                            <OnIdiom x:TypeArguments="x:Double" Phone="34" Default="44" />
+                        </Button.MinimumHeightRequest>
+                    </Button>
+                </HorizontalStackLayout>
+
+                <CollectionView Grid.Row="2"
+                                ItemsSource="{Binding ChatHistory}"
+                                SelectionMode="None"
+                                VerticalOptions="Fill"
+                                HorizontalOptions="Fill"
+                                ItemSizingStrategy="MeasureAllItems">
                     <CollectionView.ItemTemplate>
                         <DataTemplate>
-                            <Frame Margin="4" Padding="8" 
-                                   BackgroundColor="{Binding Role, Converter={StaticResource RoleColorConverter}}"
-                                   HorizontalOptions="{Binding Role, Converter={StaticResource RoleAlignConverter}}">
-                                <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto" ColumnSpacing="6">
-                                    <Label Grid.Column="0" Text="{Binding Content}" TextColor="Black" LineBreakMode="WordWrap" />
-                                    <Button Grid.Column="1" Text="Копировать" FontSize="11" Padding="6,2"
-                                            VerticalOptions="Start"
-                                            Command="{Binding Source={x:Reference RootPage}, Path=BindingContext.CopyMessageCommand}"
-                                            CommandParameter="{Binding .}" />
-                                </Grid>
-                            </Frame>
+                            <VerticalStackLayout Padding="0,0,0,18"
+                                                 Spacing="6"
+                                                 HorizontalOptions="{Binding Role, Converter={StaticResource RoleAlignConverter}}">
+                                <Label Text="{Binding Role, Converter={StaticResource RoleSenderLabelConverter}}"
+                                       FontSize="12"
+                                       FontAttributes="Bold"
+                                       TextColor="{AppThemeBinding Light=#6B7280, Dark=#9CA3AF}"
+                                       HorizontalOptions="{Binding Role, Converter={StaticResource RoleAlignConverter}}"
+                                       HorizontalTextAlignment="{Binding Role, Converter={StaticResource RoleSenderTextAlignConverter}}" />
+                                <Border MaximumWidthRequest="340"
+                                        HorizontalOptions="{Binding Role, Converter={StaticResource RoleAlignConverter}}"
+                                        StrokeThickness="0"
+                                        Padding="12,10"
+                                        BackgroundColor="{Binding Role, Converter={StaticResource RoleColorConverter}}">
+                                    <Border.StrokeShape>
+                                        <RoundRectangle CornerRadius="14" />
+                                    </Border.StrokeShape>
+                                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                        <Label Grid.Column="0"
+                                               Text="{Binding Content}"
+                                               TextColor="{Binding Role, Converter={StaticResource RoleMessageTextColorConverter}}"
+                                               LineBreakMode="WordWrap" />
+                                        <Button Grid.Column="1"
+                                                Text="Копировать"
+                                                FontSize="11"
+                                                Padding="8,4"
+                                                CornerRadius="8"
+                                                VerticalOptions="Start"
+                                                BackgroundColor="{AppThemeBinding Light=#FFFFFF, Dark=#3A3A3C}"
+                                                TextColor="{AppThemeBinding Light=#374151, Dark=#E5E7EB}"
+                                                Command="{Binding Source={x:Reference RootPage}, Path=BindingContext.CopyMessageCommand}"
+                                                CommandParameter="{Binding .}" />
+                                    </Grid>
+                                </Border>
+                            </VerticalStackLayout>
                         </DataTemplate>
                     </CollectionView.ItemTemplate>
                 </CollectionView>
 
-                <Grid Grid.Row="2" ColumnDefinitions="*, Auto" ColumnSpacing="10" Margin="0,8,0,0">
-                    <Entry Grid.Column="0" Text="{Binding UserInput}" 
-                           Placeholder="Спросите AI (например: Покажи расписание Иванова)..."
-                           ReturnType="Send"
-                           ReturnCommand="{Binding SendChatMessageCommand}" />
-                    <Button Grid.Column="1" Text="➤" Command="{Binding SendChatMessageCommand}" WidthRequest="50"/>
-                </Grid>
+                <Border Grid.Row="3"
+                        StrokeThickness="1"
+                        Stroke="{AppThemeBinding Light=#E5E7EB, Dark=#3A3A3C}"
+                        BackgroundColor="{AppThemeBinding Light=#F9FAFB, Dark=#2C2C2E}"
+                        Padding="4,2">
+                    <Border.StrokeShape>
+                        <RoundRectangle CornerRadius="14" />
+                    </Border.StrokeShape>
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8" Padding="8,4">
+                        <Entry Grid.Column="0"
+                               Text="{Binding UserInput}"
+                               Placeholder="Спросите AI о расписании..."
+                               ReturnType="Send"
+                               ReturnCommand="{Binding SendChatMessageCommand}" />
+                        <Button Grid.Column="1"
+                                Text="Отправить"
+                                Command="{Binding SendChatMessageCommand}"
+                                FontSize="13"
+                                Padding="14,10"
+                                CornerRadius="12" />
+                    </Grid>
+                </Border>
             </Grid>
         </Border>
-
     </Grid>
 </ContentPage>
