@@ -51,6 +51,10 @@ namespace RukScheduleApp.ViewModels
         [ObservableProperty]
         private bool _isBusy;
 
+        /// <summary>Секция «филиал / сотрудник / дата» развёрнута (свёрнуть — больше места чату).</summary>
+        [ObservableProperty]
+        private bool _scheduleParametersExpanded;
+
         public MainViewModel(IScheduleParser parser, ILlmService llmService, IDatabaseService databaseService)
         {
             _parser = parser;
@@ -59,6 +63,27 @@ namespace RukScheduleApp.ViewModels
             ChatHistory = new ObservableCollection<ChatMessage>();
             ChatHistory.Add(new ChatMessage { Role = "assistant", Content = WelcomeText });
         }
+
+        /// <summary>Краткая строка для свёрнутой панели параметров.</summary>
+        public string ScheduleParametersSummary => FormatScheduleParametersSummary();
+
+        public bool ScheduleParametersCollapsed => !ScheduleParametersExpanded;
+
+        private string FormatScheduleParametersSummary()
+        {
+            var branch = string.IsNullOrEmpty(SelectedBranch) ? "филиал —" : SelectedBranch;
+            var teacher = string.IsNullOrEmpty(SelectedTeacher) ? "сотрудник —" : SelectedTeacher;
+            if (teacher.Length > 36)
+                teacher = teacher[..33] + "…";
+            return $"{branch} · {teacher} · {SelectedDate:dd.MM.yyyy}";
+        }
+
+        partial void OnScheduleParametersExpandedChanged(bool value) =>
+            OnPropertyChanged(nameof(ScheduleParametersCollapsed));
+
+        [RelayCommand]
+        private void ToggleScheduleParameters() =>
+            ScheduleParametersExpanded = !ScheduleParametersExpanded;
 
         /// <summary>Подсказка до выбора филиала (список преподавателей ещё не загружен).</summary>
         public bool ShowTeacherBranchHint =>
@@ -92,12 +117,19 @@ namespace RukScheduleApp.ViewModels
 
         partial void OnSelectedBranchChanged(string value)
         {
+            OnPropertyChanged(nameof(ScheduleParametersSummary));
             OnPropertyChanged(nameof(ShowTeacherBranchHint));
             OnPropertyChanged(nameof(ShowTeacherLoadingRow));
             if (string.IsNullOrEmpty(value))
                 return;
             _ = LoadTeachersForBranchAsync(value);
         }
+
+        partial void OnSelectedTeacherChanged(string value) =>
+            OnPropertyChanged(nameof(ScheduleParametersSummary));
+
+        partial void OnSelectedDateChanged(DateTime value) =>
+            OnPropertyChanged(nameof(ScheduleParametersSummary));
 
         private async Task LoadTeachersForBranchAsync(string branchName)
         {
