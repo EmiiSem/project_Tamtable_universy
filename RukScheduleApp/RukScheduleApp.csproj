@@ -27,8 +27,8 @@
 		       <MauiXaml Update="MyPage.xaml" Inflator="Runtime" /> (force runtime inflation) -->
 		<MauiXamlInflator>SourceGen</MauiXamlInflator>
 
-		<!-- Display name -->
-		<ApplicationTitle>RukScheduleApp</ApplicationTitle>
+		<!-- Display name (под ярлыком ОС и в списке приложений) -->
+		<ApplicationTitle>ParserUniversu</ApplicationTitle>
 
 		<!-- App Identifier -->
 		<ApplicationId>com.companyname.rukscheduleapp</ApplicationId>
